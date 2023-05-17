@@ -7,5 +7,5 @@ An Azure CLI script for deploying a windows virtual machine on MacOs
 ## Setup
 - Clone repository 
 - cd into the project directory
-- chmod 700 <the file name>
-- ./<the file name >
+- run => chmod 700 automate_virtual_machine
+- run => ./automate_virtual_machine
