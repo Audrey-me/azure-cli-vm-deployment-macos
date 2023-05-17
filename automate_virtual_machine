@@ -1,0 +1,155 @@
+#!/bin/bash
+
+
+display_text_for_duration() {
+    local duration=$1
+    local text=$2
+
+    echo "$text"
+    sleep "$duration"
+     
+}
+
+setup_OS(){
+       display_text_for_duration 7 "installing azure cli.. and this might take a couple of minutes, while you wait ensure you have a strong internet connectivity."
+       # installing azure cli
+       brew update && brew install azure-cli
+
+       # login to your azure device
+       az login --use-device-code
+       echo "user logged in successfully"
+
+       # view available subscription for your account
+       az account list --output table
+       read -p "Enter your SubscriptionId: " subscription_id
+       az account set --subscription "$subscription_id"
+
+   
+}
+
+
+display_available_regions(){
+   echo "List of available regions: "
+    # awk 'NR>2{print $1}' was used to remove table headers rather than head -n -1 which is not supported by all versions of head command 
+   available_regions=($( az account list-locations --query "[].name" --output table | awk 'NR>2{print $1}' | head -n  5 ))
+   for i in "${available_regions[@]}"; do
+       echo "$i"
+   done
+}
+
+
+check_region(){
+    local region_exists=false
+    while [[ "$region_exists" = false ]]; do
+        display_available_regions
+        read -p "Enter your region: " selected_region
+        for i in "${available_regions[@]}"; 
+        do
+            if [[ "$selected_region" = "$i" ]]; 
+            then
+                region_exists=true
+                echo "region exists"
+                break
+            else   
+                continue 
+            fi    
+        done 
+    done           
+
+}
+
+# check for existing resource group
+check_resource_group(){
+    while true; do
+        read -p "What do you want to name your resource group? " resource_group
+
+        if az group show --name "$resource_group" --query "location" --output tsv 2>/dev/null | grep -q "$selected_region"; then
+            echo " The Resource group '$resource_group' exists in '$selected_region', please provide another name..."
+        else
+            break
+        fi
+       
+    done
+
+}
+
+create_resource_group(){
+    echo "creating the resource group $resource_group in the $selected_region region..."
+    az group create --name $resource_group --location $selected_region
+
+}
+
+list_resource_groups() {
+    echo "find the available resource group here"
+    az group list -o table
+}
+
+create_virtual_machine(){
+    read -p "Enter a name for your Virtual Machine: " name
+    read -p "Enter an admin username of your choice: " admin_username
+    read -p "Enter an admin password of your choice: " admin_password
+
+    echo "Creating your Virtual Machine......"
+
+    az vm create \
+     --resource-group "$resource_group" \
+     --name "$name"\
+     --image Win2022AzureEditionCore \
+     --public-ip-sku Standard \
+     --admin-username "$admin_username" \
+     --admin-password "$admin_password" \
+     --size Standard_DS2_v2
+
+      
+    
+    echo "Note your publicIpAddress above"
+}
+
+install_web_server(){
+     echo "installing web server....."
+     az vm run-command invoke -g "$resource_group" -n "$name" --command-id RunPowerShellScript --scripts "Install-WindowsFeature -name Web-Server -IncludeManagementTools"
+     az vm open-port --port 80 --resource-group "$resource_group" --name "$name"
+     echo "view the web server in action by putting your publicIpAddress into the browser. "
+}
+
+delete_yes_no(){
+     local delete_VM=("1. Yes"  "2. No" )
+     for i in "${delete_VM[@]}";
+     do
+        echo "$i"
+     done    
+}
+
+confirm_delete(){
+     delete_yes_no
+     read -p "Do you want to delete your newly created Virtual Machine(pick a number) : " n
+     
+     while true; do
+            if [ "$n" -eq 1 ]; then
+            az vm delete --resource-group "$resource_group" --name "$name" --yes
+            status=true
+            echo "deleted Successfully!!"
+            break
+
+            elif [ "$n" -eq 2 ]; then 
+                echo "No worries, Enjoy your Virtual Machine...."
+                break
+
+            else
+                echo "pick either 1 or 2 "
+                read -p "Do you want to delete your newly created Virtual Machine (pick a number): " n
+            fi
+     done    
+
+}
+
+
+setup_OS
+display_available_regions
+check_region
+check_resource_group
+create_resource_group
+create_virtual_machine
+install_web_server
+confirm_delete
+
