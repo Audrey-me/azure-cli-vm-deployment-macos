@@ -30,7 +30,8 @@ setup_OS(){
 
 display_available_regions(){
    echo "List of available regions: "
-   available_regions=($(az account list-locations --query "[].name" --output table | cut -d '|' -f 3 | sed '1,2d' | tail -n +2 | head -n 5))
+    # awk 'NR>2{print $1}' was used to remove table headers rather than head -n -1 which is not supported by all versions of head command 
+   available_regions=($( az account list-locations --query "[].name" --output table | awk 'NR>2{print $1}' | head -n  5 ))
    for i in "${available_regions[@]}"; do
        echo "$i"
    done
